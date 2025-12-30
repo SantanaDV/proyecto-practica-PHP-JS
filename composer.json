@@ -1,0 +1,17 @@
+{
+    "name": "santa/proyecto-practica-php-js",
+    "description": "proyecto-practica",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Santa\\ProyectoPracticaPhpJs\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Fran Santana",
+            "email": "fjsantanadev@gmail.com"
+        }
+    ],
+    "require": {}
+}
