@@ -65,6 +65,54 @@ $routes = [
         json_response(['data' => ['id' => (int)$id]], 200);
     }],
 
+    ['POST', '#^/api/tasks$#', function () {
+        try {
+            $body = read_json_body();
+        } catch (RuntimeException $e) {
+            error_response($e->getMessage(), 400);
+            return;
+        }
+
+        //Validamos las reglas que hemos puesto en el diseño de la bd
+
+        $errors = [];
+
+        $projectId = isset($body['project_id']) ? (int)$body['project_id'] : 0;
+        $title     = isset($body['title']) ? trim((string)$body['title']) : '';
+        $status    = isset($body['status']) ? (string)$body['status'] : 'todo';
+        $priority  = isset($body['priority']) ? (int)$body['priority'] : 3;
+
+        $allowedStatus = ['todo', 'doing', 'done'];
+
+        if ($projectId <= 0) {
+            $errors['project_id'] = 'Debe ser un entero > 0';
+        }
+        if ($title === '' || mb_strlen($title) > 200) {
+            $errors['title'] = 'Requerido (1..200)';
+        }
+        if (!in_array($status, $allowedStatus, true)) {
+            $errors['status'] = 'Valores: todo|doing|done';
+        }
+        if ($priority < 1 || $priority > 5) {
+            $errors['priority'] = 'Rango: 1..5';
+        }
+
+        if ($errors) {
+            error_response('Validación fallida', 422, $errors);
+            return;
+        }
+
+        $created = [
+            'id' => 999,
+            'project_id' => $projectId,
+            'title' => $title,
+            'status' => $status,
+            'priority' => $priority
+        ];
+
+        json_response(['data' => $created], 201);
+    }]
+
 
 ];
 
@@ -110,5 +158,30 @@ function json_response(array $payload, int $status)
     echo json_encode($payload, JSON_UNESCAPED_UNICODE);
 }
 
+// leemos el stream real del body, si no hay nada, devolvemos un body vacio. en caso de que no sea un array, se considera un JSON invalido y devolvemos una excepcion
+function read_json_body()
+{
 
+    $raw = file_get_contents('php://input') ?: '';
+    if (trim($raw) == '') {
+        return []; // devolvemos un body vacio
+    }
 
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        throw new RuntimeException('Invalid JSON');
+    }
+
+    return $data;
+}
+
+// Separo la respuesta de error por consistencia
+function error_response(string $message, int $status, array $details = [])
+{
+    json_response([
+        'error' => [
+            'message' => $message,
+            'details' => $details
+        ]
+    ], $status);
+}
