@@ -49,16 +49,21 @@ $routes = [
     }],
 
     // Tasks list (mock)
-    ['GET', '#^/api/tasks$#', function () {
-        json_response(
-            [
-                'data' =>
-                ['id' => 10, 'project_id' => 1, 'title' => 'Crear página contacto', 'status' => 'todo', 'priority' => 2],
-                ['id' => 11, 'project_id' => 2, 'title' => 'Login con sesiones', 'status' => 'doing', 'priority' => 1],
-            ],
-            200
-        );
-    }],
+    [
+        'GET',
+        '#^/api/tasks$#',
+        function () {
+            json_response(
+                [
+                    'data' =>
+                    ['id' => 10, 'project_id' => 1, 'title' => 'Crear página contacto', 'status' => 'todo', 'priority' => 2],
+                    ['id' => 11, 'project_id' => 2, 'title' => 'Login con sesiones', 'status' => 'doing', 'priority' => 1],
+                ],
+                200
+            );
+        }
+
+    ],
 
     //Task detail con parametro {id}
     ['GET', '#^/api/tasks/(\d+)$#', function (string $id) {
@@ -69,6 +74,7 @@ $routes = [
         try {
             $body = read_json_body();
         } catch (RuntimeException $e) {
+            // -> es el operador para acceder a métodos o propiedades de un objeto
             error_response($e->getMessage(), 400);
             return;
         }
@@ -102,6 +108,51 @@ $routes = [
             return;
         }
 
+        try {
+            $pdo = get_pdo();
+
+            // INSERT 
+
+            $stmt = $pdo->prepare("
+                INSERT INTO tasks (project_id, title, status, priority)
+                VALUES (:project_id, :title, :status, :priority)
+            ");
+            $stmt->execute([
+                ':project_id' => $projectId,
+                ':title'      => $title,
+                ':status'     => $status,
+                ':priority'   => $priority,
+            ]);
+
+            //Obtenemos la id real creado por la base de datos
+            $newId = (int) $pdo->lastInsertId();
+
+            //Leemos lo que se ha guardado (que incluye created_at, que se incluye al hacer la insercion en bd)
+            $stmt2 = $pdo->prepare("
+                SELECT id,project_id, title, status, priority, created_at
+                FROM tasks
+                WHERE id = :id
+            ");
+
+            $stmt2->execute([':id' => $newId]);
+            $created = $stmt2->fetch();
+
+            json_response(['data' => $created], 201);
+        } catch (PDOException $e) {
+            // FK / integridad: SQLSTATE 23000 que suele indicar violación de constraint
+            if ($e->getCode() === '23000') {
+                error_response('Validación fallida', 422, [
+                    'project_id' => 'No existe ese proyecto (FK)'
+                ]);
+                return;
+            }
+
+            // En un proyecto real: logueas $e->getMessage() y devuelves genérico
+            error_response('Error interno', 500);
+        }
+
+        /*
+            MOCK
         $created = [
             'id' => 999,
             'project_id' => $projectId,
@@ -109,8 +160,9 @@ $routes = [
             'status' => $status,
             'priority' => $priority
         ];
-
         json_response(['data' => $created], 201);
+        
+        */
     }]
 
 
@@ -118,8 +170,6 @@ $routes = [
 
 
 //Dispatcher (el encargado de enrutar los distintos endpoints)
-
-
 
 foreach (
     $routes
@@ -184,4 +234,23 @@ function error_response(string $message, int $status, array $details = [])
             'details' => $details
         ]
     ], $status);
+}
+
+
+function get_pdo()
+{
+    //dsn = data source name, es una cadena que describe a que bd conectarte y como
+    $dsn = "mysql:host=127.0.0.1; port=3306;dbbname=mini_fullstack;charset=utf8mb4";
+    $user = "root";
+    $pass = "";
+
+
+    return new PDO($dsn, $user, $pass, [
+
+        // El :: es el operador de resolución de ambito (scope resolution operator) se usa para acceder a constantes de una clase, metodos estaticos, propiedades estaticas. 
+        // => Se usa en arrays asociativos para indicar clave -> valor
+        
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
 }
